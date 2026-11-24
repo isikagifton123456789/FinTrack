@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+:root {
+  font-family: "DM Sans", sans-serif;
+  color-scheme: light;
+  --color-ink: #17283b;
+  --color-ink-muted: #657384;
+  --color-navy: #0b1f3a;
+  --color-navy-soft: #173451;
+  --color-nav-active-text: #0b1f3a;
+  --color-accent: #8e5c25;
+  --color-accent-light: #f3eadc;
+  --color-paper: #faf9f6;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f4f2ee;
+  --color-border: #e8e4dc;
+  --color-positive: #287452;
+  --color-positive-soft: #e7f2eb;
+  --color-negative: #a6423c;
+  --color-negative-soft: #f8ecea;
+  --color-focus: #a56c2e;
+  --color-chart-muted: #8b7660;
+  --radius-card: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --color-ink: #eeeae2;
+    --color-ink-muted: #b1b8c0;
+    --color-navy: #142a42;
+    --color-navy-soft: #203c58;
+    --color-nav-active-text: #eeeae2;
+    --color-accent: #d7a563;
+    --color-accent-light: #3a3023;
+    --color-paper: #101923;
+    --color-surface: #18232e;
+    --color-surface-muted: #202c37;
+    --color-border: #34414d;
+    --color-positive: #81c5a0;
+    --color-positive-soft: #1d392e;
+    --color-negative: #e3978d;
+    --color-negative-soft: #402b2b;
+    --color-focus: #e2b574;
+    --color-chart-muted: #ad967d;
+  }
+}
+
+* { box-sizing: border-box; }
+html { min-width: 320px; background: var(--color-paper); }
+body { margin: 0; min-width: 320px; color: var(--color-ink); background: var(--color-paper); font-size: 14px; }
+button, input, select { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .58; }
+::selection { background: var(--color-accent-light); }
+:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
+.tabular { font-variant-numeric: tabular-nums lining-nums; }
+.field {
+  width: 100%; border: 1px solid var(--color-border); border-radius: 9px;
+  background: var(--color-surface); color: var(--color-ink); padding: 10px 12px;
+  outline: none; transition: border-color .15s ease, box-shadow .15s ease;
+}
+.field:focus { border-color: var(--color-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-focus) 18%, transparent); }
+.field::placeholder { color: var(--color-ink-muted); opacity: .8; }
+.search-field { padding-left: 36px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

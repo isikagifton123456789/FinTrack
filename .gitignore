@@ -1,0 +1,14 @@
+node_modules/
+.vite/
+dist/
+/.env
+/.env.*
+!/.env.example
+frontend/.env.local
+frontend/.env.*.local
+backend/.env
+backend/.env.*
+!backend/.env.example
+!frontend/.env.example
+service-account*.json
+*.service-account.json
