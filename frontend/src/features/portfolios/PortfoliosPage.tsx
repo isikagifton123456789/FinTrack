@@ -3,11 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { AnimatePresence, motion } from 'framer-motion'
-import { BriefcaseBusiness, Grid2X2, List, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { BriefcaseBusiness, Download, Grid2X2, List, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../../api'
 import type { Portfolio } from '../../types'
 import { formatCurrency, signedCurrency } from '../../lib/format'
+import { downloadCsv } from '../../lib/csv'
 import { Button, Dialog, EmptyState, ErrorState, Field, PageSkeleton, SelectField, useToast } from '../../shared/ui'
 import { portfolioSchema, type PortfolioValues } from './schemas'
 
@@ -71,7 +72,10 @@ export function PortfoliosPage() {
     <motion.section initial={{ opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .18 }} className="space-y-6">
       <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div><p className="text-sm text-[var(--color-ink-muted)]">A considered view of your client accounts.</p><h2 className="mt-1 text-2xl font-semibold tracking-[-.04em] sm:text-[28px]">Your portfolios</h2></div>
-        <Button id="create-portfolio" onClick={openCreate}><Plus size={17} strokeWidth={1.7} /> New portfolio</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" disabled={!filtered.length} onClick={() => downloadCsv('fintrack-portfolios.csv', ['Portfolio', 'Client', 'Base currency', 'Created'], filtered.map((portfolio) => [portfolio.name, portfolio.clientName, portfolio.baseCurrency, portfolio.createdAt]))}><Download size={16} /> Export CSV</Button>
+          <Button id="create-portfolio" onClick={openCreate}><Plus size={17} strokeWidth={1.7} /> New portfolio</Button>
+        </div>
       </header>
 
       <div className="flex flex-col gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 sm:flex-row sm:items-center">

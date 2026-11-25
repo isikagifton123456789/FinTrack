@@ -13,6 +13,11 @@ export interface AuthResponse {
   refreshToken?: string
 }
 
+export interface AuthActionResponse {
+  message: string
+  developmentToken?: string
+}
+
 export interface Portfolio {
   id: string
   name: string

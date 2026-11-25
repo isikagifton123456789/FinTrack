@@ -4,9 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { motion, useMotionValue, useReducedMotion, useTransform, animate } from 'framer-motion'
-import { ArrowLeft, ArrowUpDown, BarChart3, CalendarDays, Plus, Trash2, TrendingDown, TrendingUp } from 'lucide-react'
+import { ArrowLeft, ArrowUpDown, BarChart3, CalendarDays, Download, Plus, Trash2, TrendingDown, TrendingUp } from 'lucide-react'
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import { api } from '../../api'
+import { downloadCsv } from '../../lib/csv'
 import { formatCurrency, formatDate, formatPercent, formatQuantity, signedCurrency } from '../../lib/format'
 import type { Currency, Transaction, TransactionType } from '../../types'
 import { Button, Dialog, EmptyState, ErrorState, Field, useToast } from '../../shared/ui'
@@ -117,7 +118,7 @@ export function PortfolioDetailPage() {
       </section>
 
       <section aria-labelledby="holdings-title" className="space-y-3">
-        <div className="flex items-end justify-between"><div><h3 id="holdings-title" className="text-lg font-semibold">Holdings</h3><p className="mt-0.5 text-sm text-[var(--color-ink-muted)]">Average cost and current allocation by instrument.</p></div></div>
+        <div className="flex flex-wrap items-end justify-between gap-3"><div><h3 id="holdings-title" className="text-lg font-semibold">Holdings</h3><p className="mt-0.5 text-sm text-[var(--color-ink-muted)]">Average cost and current allocation by instrument.</p></div><Button variant="secondary" disabled={!summary.data.holdings.length} onClick={() => downloadCsv(`${safeFilename(currentPortfolio.name)}-holdings.csv`, ['Instrument', 'Quantity', `Average cost (${currentPortfolio.baseCurrency})`, `Invested (${currentPortfolio.baseCurrency})`, `Current value (${currentPortfolio.baseCurrency})`], summary.data.holdings.map((holding) => [holding.instrument, holding.quantity, holding.averageCost, holding.totalInvested, holding.totalValue]))}><Download size={16} /> Export holdings</Button></div>
         {summary.data.holdings.length === 0 ? <EmptyState title="No holdings yet" description="Add a buy transaction to start tracking this portfolio’s holdings." icon={<BarChart3 size={25} strokeWidth={1.5} />} action={<Button onClick={() => setTransactionOpen(true)}><Plus size={16} /> Add transaction</Button>} /> :
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)]">
             <div className="overflow-x-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]">
@@ -135,6 +136,7 @@ export function PortfolioDetailPage() {
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
           <div><h3 id="transactions-title" className="text-lg font-semibold">Transactions</h3><p className="mt-0.5 text-sm text-[var(--color-ink-muted)]">A record of activity in this portfolio.</p></div>
           <div className="grid grid-cols-2 gap-2 sm:flex">
+            <Button variant="secondary" className="col-span-2 sm:col-span-1" disabled={!filteredTransactions.length} onClick={() => downloadCsv(`${safeFilename(currentPortfolio.name)}-transactions.csv`, ['Trade date', 'Instrument', 'Type', 'Quantity', `Unit price (${currentPortfolio.baseCurrency})`, `Total (${currentPortfolio.baseCurrency})`], filteredTransactions.map((transaction) => [transaction.tradeDate, transaction.instrument, transaction.type, transaction.quantity, transaction.unitPrice, transaction.quantity * transaction.unitPrice]))}><Download size={16} /> Export CSV</Button>
             <label className="sr-only" htmlFor="filter-instrument">Filter by instrument</label><select id="filter-instrument" className="field h-10 py-2 text-sm" value={params.get('instrument') ?? ''} onChange={(event) => setFilter('instrument', event.target.value)}><option value="">All instruments</option>{[...new Set(transactions.data.map((item) => item.instrument))].sort().map((item) => <option key={item}>{item}</option>)}</select>
             <label className="sr-only" htmlFor="filter-type">Filter by transaction type</label><select id="filter-type" className="field h-10 py-2 text-sm" value={params.get('type') ?? ''} onChange={(event) => setFilter('type', event.target.value)}><option value="">Buy and sell</option><option value="BUY">Buy only</option><option value="SELL">Sell only</option></select>
             <label className="sr-only" htmlFor="filter-from">From date</label><input id="filter-from" type="date" aria-label="From date" className="field h-10 min-w-0 px-2 py-2 text-xs" value={params.get('from') ?? ''} onChange={(event) => setFilter('from', event.target.value)} />
@@ -162,6 +164,10 @@ export function PortfolioDetailPage() {
       </Dialog>
     </motion.section>
   )
+}
+
+function safeFilename(value: string): string {
+  return value.trim().replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'portfolio'
 }
 
 function Metric({ label, value, currency }: { label: string; value: number; currency: Currency }) {

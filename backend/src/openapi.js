@@ -74,7 +74,7 @@ export const openApiDocument = {
             },
           },
         },
-        responses: { '201': { description: 'Account created and tokens issued' }, '409': { description: 'Email is already registered' } },
+        responses: { '201': { description: 'Account created; a verification link was sent' }, '409': { description: 'Email is already registered' } },
       },
     },
     '/auth/login': {
@@ -85,7 +85,72 @@ export const openApiDocument = {
           required: true,
           content: { 'application/json': { schema: { type: 'object', required: ['email', 'password'], properties: { email: { type: 'string', format: 'email' }, password: { type: 'string' } } } } },
         },
-        responses: { '200': { description: 'Account and access/refresh tokens' }, '401': { description: 'Credentials do not match' } },
+        responses: { '200': { description: 'Account and access/refresh tokens' }, '401': { description: 'Credentials do not match' }, '403': { description: 'Email address is not verified' } },
+      },
+    },
+    '/auth/verify-email': {
+      post: {
+        tags: ['Authentication'],
+        summary: 'Verify an account email address',
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['token'], properties: { token: { type: 'string' } } } } } },
+        responses: { '200': { description: 'Email verified' }, '400': { description: 'Verification link is invalid or expired' } },
+      },
+    },
+    '/auth/resend-verification': {
+      post: {
+        tags: ['Authentication'],
+        summary: 'Resend an account email verification link',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email'],
+                properties: { email: { type: 'string', format: 'email' } },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'A generic response to prevent account enumeration' } },
+      },
+    },
+    '/auth/forgot-password': {
+      post: {
+        tags: ['Authentication'],
+        summary: 'Request a password reset email',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email'],
+                properties: { email: { type: 'string', format: 'email' } },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'A generic response to prevent account enumeration' } },
+      },
+    },
+    '/auth/reset-password': {
+      post: {
+        tags: ['Authentication'],
+        summary: 'Set a new password using a reset link',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['token', 'password'],
+                properties: { token: { type: 'string' }, password: { type: 'string', minLength: 8 } },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'Password updated' }, '400': { description: 'Reset link is invalid or expired' } },
       },
     },
     '/auth/refresh': {

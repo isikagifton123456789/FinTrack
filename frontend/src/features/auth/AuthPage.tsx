@@ -7,6 +7,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { api } from '../../api'
+import { ApiError } from '../../lib/errors'
 import { Button, Field, useToast } from '../../shared/ui'
 import { loginSchema, registerSchema, type LoginValues, type RegisterValues } from './schemas'
 
@@ -16,23 +17,29 @@ const demoPassword = 'demo1234'
 export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   const isRegister = mode === 'register'
   const [showPassword, setShowPassword] = useState(false)
+  const [registrationComplete, setRegistrationComplete] = useState<{ email: string; developmentToken?: string } | null>(null)
   const navigate = useNavigate()
   const { notify } = useToast()
   const loginForm = useForm<LoginValues>({ resolver: zodResolver(loginSchema), defaultValues: { email: '', password: '' } })
   const registerForm = useForm<RegisterValues>({ resolver: zodResolver(registerSchema), defaultValues: { name: '', email: '', password: '', confirmPassword: '' } })
   const mutation = useMutation({
-    mutationFn: (values: LoginValues | RegisterValues) => 'name' in values
-      ? api.register(values.name, values.email, values.password)
-      : api.login(values.email, values.password),
-    onSuccess: ({ user, token, refreshToken }) => {
+    mutationFn: async (values: LoginValues | RegisterValues) => 'name' in values
+      ? { kind: 'register' as const, result: await api.register(values.name, values.email, values.password) }
+      : { kind: 'login' as const, result: await api.login(values.email, values.password) },
+    onSuccess: (result) => {
+      if (result.kind === 'register') {
+        setRegistrationComplete({ email: registerForm.getValues('email'), developmentToken: result.result.developmentToken })
+        return
+      }
+      const { user, token, refreshToken } = result.result
       window.localStorage.setItem('fintrack.user', JSON.stringify(user))
       window.localStorage.setItem('fintrack.token', token)
       if (refreshToken) window.localStorage.setItem('fintrack.refreshToken', refreshToken)
       else window.localStorage.removeItem('fintrack.refreshToken')
-      notify(isRegister ? 'Your account is ready' : 'Welcome back', 'Your portfolios are ready to review.')
+      notify('Welcome back', 'Your portfolios are ready to review.')
       navigate('/portfolios', { replace: true })
     },
-    onError: (error: Error) => notify('Sign in couldn’t be completed', error.message, 'error'),
+    onError: (error: Error) => notify(isRegister ? 'Account could not be created' : 'Sign in couldn’t be completed', error.message, 'error'),
   })
 
   return (
@@ -58,7 +65,15 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
           <p className="text-xs font-semibold uppercase tracking-[.16em] text-[var(--color-accent)]">{isRegister ? 'Get started' : 'Welcome back'}</p>
           <h2 className="mt-2 text-3xl font-semibold tracking-[-.04em]">{isRegister ? 'Create your account' : 'Sign in to FinTrack'}</h2>
           <p className="mt-2 text-sm leading-6 text-[var(--color-ink-muted)]">{isRegister ? 'Set up a secure workspace for your client portfolios.' : 'Use your Finnet account details to continue.'}</p>
-          {isRegister ? (
+          {registrationComplete ? (
+            <div className="mt-8 space-y-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
+              <h3 className="text-lg font-semibold">Check your email</h3>
+              <p className="text-sm leading-6 text-[var(--color-ink-muted)]">We sent a verification link to <strong className="text-[var(--color-ink)]">{registrationComplete.email}</strong>. Verify your address before signing in.</p>
+              {registrationComplete.developmentToken && <Link className="inline-flex font-semibold text-[var(--color-navy)] underline decoration-[var(--color-accent)] underline-offset-4" to={`/verify-email?token=${encodeURIComponent(registrationComplete.developmentToken)}`}>Complete verification in mock mode</Link>}
+              <p className="text-sm text-[var(--color-ink-muted)]">If you don’t see the email, check your spam folder or <Link className="font-semibold text-[var(--color-navy)] underline decoration-[var(--color-accent)] underline-offset-4" to={`/resend-verification?email=${encodeURIComponent(registrationComplete.email)}`}>request another link</Link>.</p>
+              <Link className="inline-flex text-sm font-semibold text-[var(--color-navy)] underline decoration-[var(--color-accent)] underline-offset-4" to="/login">Return to sign in</Link>
+            </div>
+          ) : isRegister ? (
             <form className="mt-8 space-y-4" onSubmit={registerForm.handleSubmit((values) => mutation.mutate(values))}>
               <Field label="Full name" autoComplete="name" {...registerForm.register('name')} error={registerForm.formState.errors.name?.message} />
               <Field label="Work email" type="email" autoComplete="email" {...registerForm.register('email')} error={registerForm.formState.errors.email?.message} />
@@ -72,6 +87,8 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
               <Field label="Work email" type="email" autoComplete="email" {...loginForm.register('email')} error={loginForm.formState.errors.email?.message} />
               <PasswordField label="Password" show={showPassword} toggle={() => setShowPassword((value) => !value)} autoComplete="current-password" {...loginForm.register('password')} error={loginForm.formState.errors.password?.message} />
               {mutation.isError && <p role="alert" className="rounded-lg bg-[var(--color-negative-soft)] px-3 py-2 text-sm text-[var(--color-negative)]">{mutation.error.message}</p>}
+              {mutation.isError && mutation.error instanceof ApiError && mutation.error.body.error.code === 'EMAIL_NOT_VERIFIED' && <p className="text-sm"><Link className="font-semibold text-[var(--color-navy)] underline decoration-[var(--color-accent)] underline-offset-4" to={`/resend-verification?email=${encodeURIComponent(loginForm.getValues('email'))}`}>Resend verification email</Link></p>}
+              <p className="text-right text-sm"><Link className="font-medium text-[var(--color-navy)] underline decoration-[var(--color-accent)] underline-offset-4" to="/forgot-password">Forgot password?</Link></p>
               <Button className="w-full" type="submit" disabled={mutation.isPending}>{mutation.isPending ? 'Signing in…' : 'Sign in'} <ArrowRight size={16} strokeWidth={1.5} /></Button>
               <Button
                 type="button"

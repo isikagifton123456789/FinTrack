@@ -11,7 +11,7 @@ import type {
 } from '../types'
 
 interface Database {
-  credentials: { user: User; password: string }[]
+  credentials: { user: User; password: string; verified?: boolean; verificationToken?: string; resetToken?: string }[]
   portfolios: Portfolio[]
   transactions: Transaction[]
 }
@@ -156,19 +156,69 @@ export async function mockLogin(email: string, password: string): Promise<AuthRe
   if (!credentials) {
     throw new ApiError(401, 'INVALID_CREDENTIALS', 'Those details did not match an account. Check your email and password.', {})
   }
+  if (credentials.verified === false) {
+    throw new ApiError(403, 'EMAIL_NOT_VERIFIED', 'Verify your email address before signing in.', {})
+  }
   return { user: credentials.user, token: 'demo-session-token' }
 }
 
-export async function mockRegister(name: string, email: string, password: string): Promise<AuthResponse> {
+export async function mockRegister(name: string, email: string, password: string): Promise<{ message: string; developmentToken: string }> {
   await latency()
   const database = readDatabase()
   if (database.credentials.some((item) => item.user.email.toLowerCase() === email.toLowerCase())) {
     throw new ApiError(409, 'EMAIL_IN_USE', 'An account already uses this email address.', {})
   }
   const user = { id: createId(), name, email }
-  database.credentials.push({ user, password })
+  const developmentToken = createId()
+  database.credentials.push({ user, password, verified: false, verificationToken: developmentToken })
   writeDatabase(database)
-  return { user, token: createId() }
+  return { message: 'Check your email for a link to verify your account.', developmentToken }
+}
+
+export async function mockVerifyEmail(token: string): Promise<{ message: string }> {
+  await latency()
+  const database = readDatabase()
+  const credential = database.credentials.find((item) => item.verificationToken === token)
+  if (!credential) throw new ApiError(400, 'INVALID_OR_EXPIRED_TOKEN', 'This link is invalid or has expired. Request a new one.', {})
+  credential.verified = true
+  credential.verificationToken = undefined
+  writeDatabase(database)
+  return { message: 'Email verified. You can now sign in.' }
+}
+
+export async function mockResendVerification(email: string): Promise<{ message: string; developmentToken?: string }> {
+  await latency()
+  const database = readDatabase()
+  const credential = database.credentials.find((item) => item.user.email.toLowerCase() === email.toLowerCase() && item.verified === false)
+  if (credential) credential.verificationToken = createId()
+  writeDatabase(database)
+  return {
+    message: 'If that account needs verification, we sent a new link to its email address.',
+    ...(credential?.verificationToken ? { developmentToken: credential.verificationToken } : {}),
+  }
+}
+
+export async function mockForgotPassword(email: string): Promise<{ message: string; developmentToken?: string }> {
+  await latency()
+  const database = readDatabase()
+  const credential = database.credentials.find((item) => item.user.email.toLowerCase() === email.toLowerCase() && item.verified !== false)
+  if (credential) credential.resetToken = createId()
+  writeDatabase(database)
+  return {
+    message: 'If an account exists for that email, we sent a password reset link.',
+    ...(credential?.resetToken ? { developmentToken: credential.resetToken } : {}),
+  }
+}
+
+export async function mockResetPassword(token: string, password: string): Promise<{ message: string }> {
+  await latency()
+  const database = readDatabase()
+  const credential = database.credentials.find((item) => item.resetToken === token)
+  if (!credential) throw new ApiError(400, 'INVALID_OR_EXPIRED_TOKEN', 'This link is invalid or has expired. Request a new one.', {})
+  credential.password = password
+  credential.resetToken = undefined
+  writeDatabase(database)
+  return { message: 'Password updated. You can now sign in.' }
 }
 
 export async function mockGetPortfolios(): Promise<Portfolio[]> {

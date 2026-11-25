@@ -5,6 +5,7 @@ import { MotionConfig } from 'framer-motion'
 import { AlertTriangle } from 'lucide-react'
 import { AppShell } from './AppShell'
 import { AuthPage } from '../features/auth/AuthPage'
+import { ForgotPasswordPage, ResendVerificationPage, ResetPasswordPage, VerifyEmailPage } from '../features/auth/AuthActionsPage'
 import { PortfolioDetailPage } from '../features/portfolios/PortfolioDetailPage'
 import { PortfoliosPage } from '../features/portfolios/PortfoliosPage'
 import { Button, ToastProvider } from '../shared/ui'
@@ -18,10 +19,15 @@ export function App() {
 }
 
 function AppRoutes() {
-  return <ErrorBoundary><Routes>
+  const location = useLocation()
+  return <ErrorBoundary><Routes location={location}>
     <Route path="/" element={<Navigate to={hasSession() ? '/portfolios' : '/login'} replace />} />
     <Route path="/login" element={hasSession() ? <Navigate to="/portfolios" replace /> : <AuthPage mode="login" />} />
     <Route path="/register" element={hasSession() ? <Navigate to="/portfolios" replace /> : <AuthPage mode="register" />} />
+    <Route path="/verify-email" element={<VerifyEmailPage />} />
+    <Route path="/resend-verification" element={<ResendVerificationPage />} />
+    <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+    <Route path="/reset-password" element={<ResetPasswordPage />} />
     <Route element={hasSession() ? <AppShell /> : <Navigate to="/login" replace />}>
       <Route path="/portfolios" element={<PortfoliosPage />} />
       <Route path="/portfolios/:id" element={<PortfolioDetailPage />} />
@@ -39,6 +45,9 @@ function TitleManager() {
   useEffect(() => {
     if (pathname === '/login') document.title = 'Sign in · FinTrack'
     else if (pathname === '/register') document.title = 'Create account · FinTrack'
+    else if (pathname === '/verify-email') document.title = 'Verify email · FinTrack'
+    else if (pathname === '/forgot-password') document.title = 'Forgot password · FinTrack'
+    else if (pathname === '/reset-password') document.title = 'Reset password · FinTrack'
     else if (pathname === '/portfolios') document.title = 'Portfolios · FinTrack'
     else if (pathname.startsWith('/portfolios/')) document.title = 'Portfolio details · FinTrack'
     else document.title = 'FinTrack by Finnet Technologies'

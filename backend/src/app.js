@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs'
 import cors from 'cors'
+import { createHash, randomBytes } from 'node:crypto'
 import express from 'express'
 import jwt from 'jsonwebtoken'
 import swaggerUi from 'swagger-ui-express'
@@ -7,6 +8,7 @@ import { z } from 'zod'
 import { pool } from './db.js'
 import { HttpError } from './errors.js'
 import { assertSellWithinHoldings, calculateHoldings } from './ledger.js'
+import { assertMailerConfigured, sendPasswordResetEmail, sendVerificationEmail } from './mailer.js'
 import { openApiDocument } from './openapi.js'
 
 const app = express()
@@ -30,6 +32,11 @@ const registrationSchema = z.object({
 const loginSchema = z.object({
   email: z.email().transform((email) => email.toLowerCase()),
   password: z.string().min(1),
+})
+const emailSchema = z.object({ email: z.email().transform((email) => email.toLowerCase()) })
+const actionTokenSchema = z.object({ token: z.string().min(32).max(256) })
+const passwordResetSchema = actionTokenSchema.extend({
+  password: registrationSchema.shape.password,
 })
 const corsOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:5173')
   .split(',')
@@ -66,33 +73,88 @@ app.get('/api/health', asyncRoute(async (_request, response) => {
 
 app.post('/api/auth/register', asyncRoute(async (request, response) => {
   const { name, email, password } = registrationSchema.parse(request.body)
+  assertMailerConfigured()
   const passwordHash = await bcrypt.hash(password, 12)
-  let result
+  const client = await pool.connect()
   try {
-    result = await pool.query(
+    await client.query('BEGIN')
+    const result = await client.query(
       'INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id, name, email',
       [name, email, passwordHash],
     )
+    const user = userFromRow(result.rows[0])
+    const token = await createAuthActionToken(client, user.id, 'verify-email', 24 * 60)
+    await sendVerificationEmail(user.email, user.name, token)
+    await client.query('COMMIT')
   } catch (error) {
+    await client.query('ROLLBACK')
     if (isUniqueViolation(error)) throw new HttpError(409, 'EMAIL_IN_USE', 'An account already uses this email address.')
     throw error
+  } finally {
+    client.release()
   }
-  const user = userFromRow(result.rows[0])
-  response.status(201).json({ user, ...issueTokens(user.id) })
+  response.status(201).json({ message: 'Check your email for a link to verify your account.' })
 }))
 
 app.post('/api/auth/login', asyncRoute(async (request, response) => {
   const { email, password } = loginSchema.parse(request.body)
   const result = await pool.query(
-    'SELECT id, name, email, password_hash FROM users WHERE email = $1',
+    'SELECT id, name, email, password_hash, email_verified_at FROM users WHERE email = $1',
     [email],
   )
   const record = result.rows[0]
   if (!record || !(await bcrypt.compare(password, record.password_hash))) {
     throw new HttpError(401, 'INVALID_CREDENTIALS', 'Those details did not match an account. Check your email and password.')
   }
+  if (!record.email_verified_at) {
+    throw new HttpError(403, 'EMAIL_NOT_VERIFIED', 'Verify your email address before signing in.')
+  }
   const user = userFromRow(record)
   response.json({ user, ...issueTokens(user.id) })
+}))
+
+app.post('/api/auth/verify-email', asyncRoute(async (request, response) => {
+  const { token } = actionTokenSchema.parse(request.body)
+  await consumeAuthActionToken(token, 'verify-email', async (client, userId) => {
+    await client.query('UPDATE users SET email_verified_at = COALESCE(email_verified_at, NOW()), updated_at = NOW() WHERE id = $1', [userId])
+  })
+  response.json({ message: 'Email verified. You can now sign in.' })
+}))
+
+app.post('/api/auth/resend-verification', asyncRoute(async (request, response) => {
+  const { email } = emailSchema.parse(request.body)
+  assertMailerConfigured()
+  const result = await pool.query('SELECT id, name, email FROM users WHERE email = $1 AND email_verified_at IS NULL', [email])
+  if (result.rowCount) {
+    const user = userFromRow(result.rows[0])
+    await createAndSendAuthActionEmail(user, 'verify-email', 24 * 60, sendVerificationEmail)
+  }
+  response.json({ message: 'If that account needs verification, we sent a new link to its email address.' })
+}))
+
+app.post('/api/auth/forgot-password', asyncRoute(async (request, response) => {
+  const { email } = emailSchema.parse(request.body)
+  assertMailerConfigured()
+  const result = await pool.query('SELECT id, name, email FROM users WHERE email = $1 AND email_verified_at IS NOT NULL', [email])
+  if (result.rowCount) {
+    const user = userFromRow(result.rows[0])
+    await createAndSendAuthActionEmail(user, 'password-reset', 30, sendPasswordResetEmail)
+  }
+  response.json({ message: 'If an account exists for that email, we sent a password reset link.' })
+}))
+
+app.post('/api/auth/reset-password', asyncRoute(async (request, response) => {
+  const { token, password } = passwordResetSchema.parse(request.body)
+  await consumeAuthActionToken(token, 'password-reset', async (client, userId) => {
+    const passwordHash = await bcrypt.hash(password, 12)
+    await client.query('UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1', [userId, passwordHash])
+    await client.query(
+      `UPDATE auth_action_tokens SET consumed_at = NOW()
+       WHERE user_id = $1 AND purpose = 'password-reset' AND consumed_at IS NULL`,
+      [userId],
+    )
+  })
+  response.json({ message: 'Password updated. You can now sign in.' })
 }))
 
 app.post('/api/auth/refresh', asyncRoute(async (request, response) => {
@@ -311,6 +373,61 @@ function issueTokens(userId) {
       expiresIn: process.env.JWT_REFRESH_TTL ?? '7d',
       algorithm: 'HS256',
     }),
+  }
+}
+
+async function createAuthActionToken(client, userId, purpose, ttlMinutes) {
+  const token = randomBytes(32).toString('base64url')
+  const tokenHash = createHash('sha256').update(token).digest('hex')
+  await client.query(
+    `UPDATE auth_action_tokens SET consumed_at = NOW()
+     WHERE user_id = $1 AND purpose = $2 AND consumed_at IS NULL`,
+    [userId, purpose],
+  )
+  await client.query(
+    `INSERT INTO auth_action_tokens (token_hash, user_id, purpose, expires_at)
+     VALUES ($1, $2, $3, NOW() + ($4 * INTERVAL '1 minute'))`,
+    [tokenHash, userId, purpose, ttlMinutes],
+  )
+  return token
+}
+
+async function createAndSendAuthActionEmail(user, purpose, ttlMinutes, sendEmail) {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const token = await createAuthActionToken(client, user.id, purpose, ttlMinutes)
+    await sendEmail(user.email, user.name, token)
+    await client.query('COMMIT')
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+async function consumeAuthActionToken(token, purpose, applyAction) {
+  const tokenHash = createHash('sha256').update(token).digest('hex')
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const result = await client.query(
+      `SELECT user_id FROM auth_action_tokens
+       WHERE token_hash = $1 AND purpose = $2 AND consumed_at IS NULL AND expires_at > NOW()
+       FOR UPDATE`,
+      [tokenHash, purpose],
+    )
+    if (!result.rowCount) throw new HttpError(400, 'INVALID_OR_EXPIRED_TOKEN', 'This link is invalid or has expired. Request a new one.')
+    const userId = result.rows[0].user_id
+    await applyAction(client, userId)
+    await client.query('UPDATE auth_action_tokens SET consumed_at = NOW() WHERE token_hash = $1', [tokenHash])
+    await client.query('COMMIT')
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
   }
 }
 

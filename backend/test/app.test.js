@@ -43,6 +43,35 @@ describe('FinTrack API authentication', () => {
     assert.equal(response.status, 401)
     assert.equal((await response.json()).error.code, 'INVALID_TOKEN')
   })
+
+  it('documents the email verification and password recovery endpoints', async () => {
+    const response = await fetch(`${apiUrl}/api/openapi.json`)
+    const document = await response.json()
+    assert.equal(response.status, 200)
+    assert.ok(document.paths['/auth/verify-email'])
+    assert.ok(document.paths['/auth/forgot-password'])
+    assert.ok(document.paths['/auth/reset-password'])
+  })
+
+  it('rejects a missing email verification token before accessing the database', async () => {
+    const response = await fetch(`${apiUrl}/api/auth/verify-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: '' }),
+    })
+    assert.equal(response.status, 422)
+    assert.equal((await response.json()).error.code, 'VALIDATION_ERROR')
+  })
+
+  it('enforces the password policy before attempting a reset', async () => {
+    const response = await fetch(`${apiUrl}/api/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: '0123456789012345678901234567890123456789012', password: 'lowercase1' }),
+    })
+    assert.equal(response.status, 422)
+    assert.equal((await response.json()).error.code, 'VALIDATION_ERROR')
+  })
 })
 
 describe('portfolio ledger', () => {

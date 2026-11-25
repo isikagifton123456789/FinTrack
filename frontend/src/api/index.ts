@@ -1,6 +1,7 @@
 import * as mock from './mock'
 import { ApiError } from '../lib/errors'
 import type {
+  AuthActionResponse,
   AuthResponse,
   Portfolio,
   PortfolioInput,
@@ -62,8 +63,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   login: (email: string, password: string): Promise<AuthResponse> =>
     useMock ? mock.mockLogin(email, password) : request('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
-  register: (name: string, email: string, password: string): Promise<AuthResponse> =>
+  register: (name: string, email: string, password: string): Promise<AuthActionResponse> =>
     useMock ? mock.mockRegister(name, email, password) : request('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password }) }),
+  verifyEmail: (token: string): Promise<AuthActionResponse> =>
+    useMock ? mock.mockVerifyEmail(token) : request('/api/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) }),
+  resendVerification: (email: string): Promise<AuthActionResponse> =>
+    useMock ? mock.mockResendVerification(email) : request('/api/auth/resend-verification', { method: 'POST', body: JSON.stringify({ email }) }),
+  forgotPassword: (email: string): Promise<AuthActionResponse> =>
+    useMock ? mock.mockForgotPassword(email) : request('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
+  resetPassword: (token: string, password: string): Promise<AuthActionResponse> =>
+    useMock ? mock.mockResetPassword(token, password) : request('/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) }),
   getPortfolios: (): Promise<Portfolio[]> =>
     useMock ? mock.mockGetPortfolios() : request('/api/portfolios'),
   createPortfolio: (input: PortfolioInput): Promise<Portfolio> =>

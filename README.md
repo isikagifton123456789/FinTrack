@@ -20,6 +20,8 @@ Copy-Item frontend\.env.example frontend\.env.local
 
 Edit `backend\.env` and set `DATABASE_URL` to the **newly rotated** Render connection string, plus a random `JWT_SECRET` of at least 32 characters. For a Render external connection, set `DATABASE_SSL=true`. Never paste database credentials into source files or commit `.env` files.
 
+For email verification and password resets, configure the backend Gmail SMTP settings in `backend\.env`: set `SMTP_USER` to the Gmail address, `SMTP_PASS` to a Google App Password (not the Gmail sign-in password), and `EMAIL_FROM_NAME` to the sender name users should see. Set `APP_URL` to the frontend origin. Gmail App Passwords require 2-Step Verification on the Google account. The default SMTP host and port are `smtp.gmail.com:465`; keep all mail credentials out of source control.
+
 Apply the SQL migration, seed the demo account, then run both applications:
 
 ```powershell
@@ -29,6 +31,31 @@ npm run dev
 ```
 
 The frontend is served at `http://localhost:5173`, and the API at `http://localhost:4000`. Vite proxies local `/api` requests to the backend. The seed script reads `DEMO_EMAIL` and `DEMO_PASSWORD` from `backend\.env`; the example values provide `analyst@finnet.demo` / `demo1234` for assessment use.
+
+## Run with Docker Compose
+
+Install Docker Desktop, then from the repository root in PowerShell:
+
+```powershell
+Copy-Item .env.docker.example .env
+```
+
+Edit `.env` and replace `POSTGRES_PASSWORD`, `JWT_SECRET`, and `DEMO_PASSWORD` with unique random values before starting. Keep the database password alphanumeric because it is embedded in the PostgreSQL connection URL. Set `SMTP_USER` and `SMTP_PASS` to enable verification and password-reset emails; use a Google App Password. `.env` is ignored by Git.
+
+Build and start the database, API, and frontend:
+
+```powershell
+docker compose up --build -d
+docker compose ps
+```
+
+Open `http://localhost:8080`. The API automatically applies database migrations on startup, and PostgreSQL data persists in the `postgres_data` Docker volume. To load the assessment demo data, keep `DEMO_EMAIL` and `DEMO_PASSWORD` configured in `.env`, then run:
+
+```powershell
+docker compose exec api npm run seed --workspace backend
+```
+
+Stop the services with `docker compose down`; this preserves the database volume. `docker compose down -v` deletes the database data. For an internet-facing deployment, use a Docker-capable host, configure `APP_URL` and `CORS_ORIGIN` to your public HTTPS origin, add TLS through the host’s reverse proxy, set Gmail SMTP credentials, and use unique production secrets. Do not expose the database port publicly.
 
 ## Render deployment
 
@@ -52,7 +79,8 @@ Health check: `/api/health`
 
 Endpoints include:
 
-- `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/refresh`
+- `POST /api/auth/register`, `POST /api/auth/verify-email`, `POST /api/auth/resend-verification`
+- `POST /api/auth/login`, `POST /api/auth/forgot-password`, `POST /api/auth/reset-password`, `POST /api/auth/refresh`
 - `GET/POST /api/portfolios`, `GET/PUT/DELETE /api/portfolios/:id`
 - `GET/POST /api/portfolios/:id/transactions`, `DELETE /api/transactions/:id`
 - `GET /api/portfolios/:id/summary`
@@ -63,9 +91,11 @@ Portfolio routes require a bearer access token. Passwords are hashed with bcrypt
 
 `frontend/.env.example` selects the backend API by default. To use the optional local demo adapter, set `VITE_USE_MOCK_API=true`. Production frontend builds should set `VITE_API_BASE_URL` to the backend origin and keep the mock disabled.
 
-## Design and demo scope
+## CSV exports and demo scope
 
-Light/dark color, surface, border, and status design tokens live in `frontend/src/theme.css`. Dark appearance follows system preference. The sample valuation uses static indicative prices and a fixed KES/USD conversion; it is not live market or FX data. CSV export and internationalisation are out of scope.
+Export portfolio lists from the portfolio page, or export holdings and the currently filtered transaction list from an individual portfolio page. CSV values are quoted and text values that could be interpreted as spreadsheet formulas are neutralized.
+
+Light/dark color, surface, border, and status design tokens live in `frontend/src/theme.css`. Dark appearance follows system preference. The sample valuation uses static indicative prices and a fixed KES/USD conversion; it is not live market or FX data. Internationalisation is out of scope.
 
 ## Verification
 

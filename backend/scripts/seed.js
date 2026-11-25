@@ -21,10 +21,11 @@ try {
   await pool.query('BEGIN')
   const passwordHash = await bcrypt.hash(demoPassword, 12)
   const userResult = await pool.query(
-    `INSERT INTO users (name, email, password_hash)
-     VALUES ('Amina Njeri', $1, $2)
+    `INSERT INTO users (name, email, password_hash, email_verified_at)
+     VALUES ('Amina Njeri', $1, $2, NOW())
      ON CONFLICT ((LOWER(email))) DO UPDATE
-       SET name = EXCLUDED.name, password_hash = EXCLUDED.password_hash, updated_at = NOW()
+       SET name = EXCLUDED.name, password_hash = EXCLUDED.password_hash,
+           email_verified_at = COALESCE(users.email_verified_at, NOW()), updated_at = NOW()
      RETURNING id`,
     [demoEmail, passwordHash],
   )
