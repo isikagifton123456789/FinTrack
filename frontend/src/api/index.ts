@@ -10,8 +10,10 @@ import type {
   TransactionInput,
 } from '../types'
 
-const useMock = import.meta.env.VITE_USE_MOCK_API !== 'false'
-const baseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
+const useMock = import.meta.env.VITE_USE_MOCK_API === 'true'
+const baseUrl = import.meta.env.VITE_API_BASE_URL ?? (
+  import.meta.env.PROD ? 'https://fintrack-clgc.onrender.com' : ''
+)
 
 async function performRequest(path: string, init: RequestInit | undefined, token: string | null): Promise<Response> {
   const headers = new Headers(init?.headers)

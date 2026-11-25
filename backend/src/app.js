@@ -38,7 +38,10 @@ const actionTokenSchema = z.object({ token: z.string().min(32).max(256) })
 const passwordResetSchema = actionTokenSchema.extend({
   password: registrationSchema.shape.password,
 })
-const corsOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:5173')
+const defaultCorsOrigin = process.env.NODE_ENV === 'production'
+  ? 'https://fin-track-eta-dusky.vercel.app'
+  : 'http://localhost:5173'
+const corsOrigins = (process.env.CORS_ORIGIN ?? defaultCorsOrigin)
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean)
